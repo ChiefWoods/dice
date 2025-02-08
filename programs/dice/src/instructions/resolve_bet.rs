@@ -113,7 +113,7 @@ impl<'info> ResolveBet<'info> {
                     },
                     signer_seeds,
                 ),
-                payout,
+                std::cmp::min(payout, self.vault.lamports()),
             )?;
         }
 
