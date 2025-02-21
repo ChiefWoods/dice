@@ -28,29 +28,23 @@ pub struct PlaceBet<'info> {
     pub system_program: Program<'info, System>,
 }
 
-impl<'info> PlaceBet<'info> {
-    pub fn place_bet(
-        &mut self,
-        bumps: PlaceBetBumps,
-        seed: u128,
-        roll: u8,
-        amount: u64,
-    ) -> Result<()> {
-        self.bet.set_inner(Bet {
-            bump: bumps.bet,
+impl PlaceBet<'_> {
+    pub fn place_bet(ctx: Context<PlaceBet>, seed: u128, roll: u8, amount: u64) -> Result<()> {
+        ctx.accounts.bet.set_inner(Bet {
+            bump: ctx.bumps.bet,
             roll,
             slot: Clock::get()?.slot,
             amount,
             seed,
-            player: self.player.key(),
+            player: ctx.accounts.player.key(),
         });
 
         transfer(
             CpiContext::new(
-                self.system_program.to_account_info(),
+                ctx.accounts.system_program.to_account_info(),
                 Transfer {
-                    from: self.player.to_account_info(),
-                    to: self.vault.to_account_info(),
+                    from: ctx.accounts.player.to_account_info(),
+                    to: ctx.accounts.vault.to_account_info(),
                 },
             ),
             amount,

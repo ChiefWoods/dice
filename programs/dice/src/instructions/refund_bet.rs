@@ -25,27 +25,30 @@ pub struct RefundBet<'info> {
     pub system_program: Program<'info, System>,
 }
 
-impl<'info> RefundBet<'info> {
-    pub fn refund_bet(&mut self, bumps: RefundBetBumps) -> Result<()> {
+impl RefundBet<'_> {
+    pub fn refund_bet(ctx: Context<RefundBet>) -> Result<()> {
         require_gt!(
-            Clock::get()?.slot - self.bet.slot,
+            Clock::get()?.slot - ctx.accounts.bet.slot,
             REFUND_COOLDOWN_SLOTS,
             DiceError::RefundCooldownNotElapsed
         );
 
-        let signer_seeds: &[&[&[u8]]] =
-            &[&[VAULT_SEED, &self.house.key().to_bytes()[..], &[bumps.vault]]];
+        let signer_seeds: &[&[&[u8]]] = &[&[
+            VAULT_SEED,
+            &ctx.accounts.house.key().to_bytes()[..],
+            &[ctx.bumps.vault],
+        ]];
 
         transfer(
             CpiContext::new_with_signer(
-                self.system_program.to_account_info(),
+                ctx.accounts.system_program.to_account_info(),
                 Transfer {
-                    from: self.vault.to_account_info(),
-                    to: self.player.to_account_info(),
+                    from: ctx.accounts.vault.to_account_info(),
+                    to: ctx.accounts.player.to_account_info(),
                 },
                 signer_seeds,
             ),
-            self.bet.amount,
+            ctx.accounts.bet.amount,
         )
     }
 }

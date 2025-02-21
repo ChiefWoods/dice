@@ -17,14 +17,14 @@ pub struct Initialize<'info> {
     pub system_program: Program<'info, System>,
 }
 
-impl<'info> Initialize<'info> {
-    pub fn initialize(&mut self, amount: u64) -> Result<()> {
+impl Initialize<'_> {
+    pub fn initialize(ctx: Context<Initialize>, amount: u64) -> Result<()> {
         transfer(
             CpiContext::new(
-                self.system_program.to_account_info(),
+                ctx.accounts.system_program.to_account_info(),
                 Transfer {
-                    from: self.house.to_account_info(),
-                    to: self.vault.to_account_info(),
+                    from: ctx.accounts.house.to_account_info(),
+                    to: ctx.accounts.vault.to_account_info(),
                 },
             ),
             amount,

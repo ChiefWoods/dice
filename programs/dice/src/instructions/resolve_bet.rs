@@ -34,9 +34,10 @@ pub struct ResolveBet<'info> {
     pub system_program: Program<'info, System>,
 }
 
-impl<'info> ResolveBet<'info> {
-    pub fn verify_ed25519_signature(&mut self, sig: &[u8]) -> Result<()> {
-        let ix = load_instruction_at_checked(0, &self.instructions_sysvar.to_account_info())?;
+impl ResolveBet<'_> {
+    pub fn verify_ed25519_signature(ctx: &Context<ResolveBet>, sig: &[u8]) -> Result<()> {
+        let ix =
+            load_instruction_at_checked(0, &ctx.accounts.instructions_sysvar.to_account_info())?;
 
         require_keys_eq!(
             ix.program_id,
@@ -58,7 +59,7 @@ impl<'info> ResolveBet<'info> {
             signature
                 .public_key
                 .ok_or(DiceError::InvalidEd25519Pubkey)?,
-            self.house.key(),
+            ctx.accounts.house.key(),
             DiceError::InvalidEd25519Pubkey
         );
 
@@ -75,14 +76,14 @@ impl<'info> ResolveBet<'info> {
                 .message
                 .as_ref()
                 .ok_or(DiceError::InvalidEd25519Message)?
-                .eq(&self.bet.to_slice()),
+                .eq(&ctx.accounts.bet.to_slice()),
             DiceError::InvalidEd25519Message
         );
 
         Ok(())
     }
 
-    pub fn resolve_bet(&mut self, bumps: ResolveBetBumps, sig: &[u8]) -> Result<()> {
+    pub fn resolve_bet(ctx: Context<ResolveBet>, sig: &[u8]) -> Result<()> {
         let hash = hash(sig).to_bytes();
         let mut hash_16: [u8; 16] = [0; 16];
         hash_16.copy_from_slice(&hash[0..16]);
@@ -92,28 +93,31 @@ impl<'info> ResolveBet<'info> {
 
         let roll = lower.wrapping_add(upper).wrapping_rem(100) as u8 + 1;
 
-        if self.bet.roll > roll {
-            let payout = (self.bet.amount as u128)
+        if ctx.accounts.bet.roll > roll {
+            let payout = (ctx.accounts.bet.amount as u128)
                 .checked_mul(10000 - HOUSE_EDGE as u128)
                 .unwrap()
-                .checked_div(self.bet.roll as u128 - 1)
+                .checked_div(ctx.accounts.bet.roll as u128 - 1)
                 .unwrap()
                 .checked_div(100)
                 .unwrap() as u64;
 
-            let signer_seeds: &[&[&[u8]]] =
-                &[&[VAULT_SEED, &self.house.key().to_bytes()[..], &[bumps.vault]]];
+            let signer_seeds: &[&[&[u8]]] = &[&[
+                VAULT_SEED,
+                &ctx.accounts.house.key().to_bytes()[..],
+                &[ctx.bumps.vault],
+            ]];
 
             transfer(
                 CpiContext::new_with_signer(
-                    self.system_program.to_account_info(),
+                    ctx.accounts.system_program.to_account_info(),
                     Transfer {
-                        from: self.vault.to_account_info(),
-                        to: self.player.to_account_info(),
+                        from: ctx.accounts.vault.to_account_info(),
+                        to: ctx.accounts.player.to_account_info(),
                     },
                     signer_seeds,
                 ),
-                std::cmp::min(payout, self.vault.lamports()),
+                std::cmp::min(payout, ctx.accounts.vault.lamports()),
             )?;
         }
 
