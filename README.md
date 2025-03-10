@@ -13,6 +13,7 @@ Dice bet game for [Turbin3 Builders Cohort](https://turbin3.com/).
 
 ### Libraries
 
+- [@coral-xyz/anchor](https://www.anchor-lang.com/)
 - [@solana/web3.js](https://solana-labs.github.io/solana-web3.js/)
 - [solana-bankrun](https://kevinheavey.github.io/solana-bankrun/)
 - [anchor-bankrun](https://kevinheavey.github.io/solana-bankrun/)
