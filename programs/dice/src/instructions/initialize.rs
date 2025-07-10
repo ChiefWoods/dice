@@ -1,8 +1,9 @@
-use crate::constants::*;
 use anchor_lang::{
     prelude::*,
     system_program::{transfer, Transfer},
 };
+
+use crate::VAULT_SEED;
 
 #[derive(Accounts)]
 pub struct Initialize<'info> {
@@ -18,7 +19,7 @@ pub struct Initialize<'info> {
 }
 
 impl Initialize<'_> {
-    pub fn initialize(ctx: Context<Initialize>, amount: u64) -> Result<()> {
+    pub fn handler(ctx: Context<Initialize>, amount: u64) -> Result<()> {
         transfer(
             CpiContext::new(
                 ctx.accounts.system_program.to_account_info(),

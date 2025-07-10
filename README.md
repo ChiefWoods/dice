@@ -21,7 +21,6 @@ Dice bet game for [Turbin3 Builders Cohort](https://turbin3.com/).
 ### Crates
 
 - [anchor-lang](https://docs.rs/anchor-lang/latest/anchor_lang/)
-- [anchor-instruction-sysvar](https://github.com/ShrinathNR/anchor-instruction-sysvar)
 
 ### Test Runner
 

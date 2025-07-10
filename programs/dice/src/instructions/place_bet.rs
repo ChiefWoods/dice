@@ -1,9 +1,9 @@
-use crate::{constants::*, state::*};
 use anchor_lang::{
     prelude::*,
     system_program::{transfer, Transfer},
-    Discriminator,
 };
+
+use crate::{Bet, BET_SEED, VAULT_SEED};
 
 #[derive(Accounts)]
 #[instruction(seed: u128)]
@@ -29,7 +29,7 @@ pub struct PlaceBet<'info> {
 }
 
 impl PlaceBet<'_> {
-    pub fn place_bet(ctx: Context<PlaceBet>, seed: u128, roll: u8, amount: u64) -> Result<()> {
+    pub fn handler(ctx: Context<PlaceBet>, seed: u128, roll: u8, amount: u64) -> Result<()> {
         ctx.accounts.bet.set_inner(Bet {
             bump: ctx.bumps.bet,
             roll,

@@ -1,13 +1,13 @@
-use crate::{constants::*, error::DiceError, state::*};
-use anchor_instruction_sysvar::Ed25519InstructionSignatures;
 use anchor_lang::{
     prelude::*,
     solana_program::{
-        ed25519_program,
-        hash::hash,
-        sysvar::instructions::{self, load_instruction_at_checked},
+        ed25519_program, hash::hash, sysvar::instructions::load_instruction_at_checked,
     },
     system_program::{transfer, Transfer},
+};
+
+use crate::{
+    ed25519::Ed25519InstructionSignatures, error::DiceError, Bet, BET_SEED, HOUSE_EDGE, VAULT_SEED,
 };
 
 #[derive(Accounts)]
@@ -28,7 +28,6 @@ pub struct ResolveBet<'info> {
         bump = bet.bump,
     )]
     pub bet: Account<'info, Bet>,
-    #[account(address = instructions::ID)]
     /// CHECK: Instructions sysvar
     pub instructions_sysvar: UncheckedAccount<'info>,
     pub system_program: Program<'info, System>,
@@ -55,14 +54,13 @@ impl ResolveBet<'_> {
 
         require!(signature.is_verifiable, DiceError::InvalidEd25519Header);
 
-        // FIX: anchor_lang@0.31.0::prelude::Pubkey != solana_program::pubkey::Pubkey
-        // require_keys_eq!(
-        //     signature
-        //         .public_key
-        //         .ok_or(DiceError::InvalidEd25519Pubkey)?,
-        //     ctx.accounts.house.key(),
-        //     DiceError::InvalidEd25519Pubkey
-        // );
+        require_keys_eq!(
+            signature
+                .public_key
+                .ok_or(DiceError::InvalidEd25519Pubkey)?,
+            ctx.accounts.house.key(),
+            DiceError::InvalidEd25519Pubkey
+        );
 
         require!(
             signature
@@ -84,7 +82,7 @@ impl ResolveBet<'_> {
         Ok(())
     }
 
-    pub fn resolve_bet(ctx: Context<ResolveBet>, sig: &[u8]) -> Result<()> {
+    pub fn handler(ctx: Context<ResolveBet>, sig: &[u8]) -> Result<()> {
         let hash = hash(sig).to_bytes();
         let mut hash_16: [u8; 16] = [0; 16];
         hash_16.copy_from_slice(&hash[0..16]);

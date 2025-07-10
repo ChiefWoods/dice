@@ -1,8 +1,9 @@
-use crate::{constants::*, error::DiceError, state::*};
 use anchor_lang::{
     prelude::*,
     system_program::{transfer, Transfer},
 };
+
+use crate::{error::DiceError, Bet, BET_SEED, REFUND_COOLDOWN_SLOTS, VAULT_SEED};
 
 #[derive(Accounts)]
 pub struct RefundBet<'info> {
@@ -26,7 +27,7 @@ pub struct RefundBet<'info> {
 }
 
 impl RefundBet<'_> {
-    pub fn refund_bet(ctx: Context<RefundBet>) -> Result<()> {
+    pub fn handler(ctx: Context<RefundBet>) -> Result<()> {
         require_gt!(
             Clock::get()?.slot - ctx.accounts.bet.slot,
             REFUND_COOLDOWN_SLOTS,
