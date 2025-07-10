@@ -1,16 +1,16 @@
-import { BankrunProvider } from "anchor-bankrun";
 import { beforeEach, describe, expect, test } from "bun:test";
-import { ProgramTestContext } from "solana-bankrun";
 import { Dice } from "../../target/types/dice";
 import { BN, Program } from "@coral-xyz/anchor";
-import { getBankrunSetup } from "../setup";
-import { Keypair, LAMPORTS_PER_SOL, SystemProgram } from "@solana/web3.js";
-import { getVaultPdaAndBump } from "../pda";
+import { Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { getVaultPda } from "../pda";
+import { LiteSVM } from "litesvm";
+import { LiteSVMProvider } from "anchor-litesvm";
+import { fundedSystemAccountInfo, getSetup } from "../setup";
 
 describe("initialize", () => {
-  let { context, provider, program } = {} as {
-    context: ProgramTestContext;
-    provider: BankrunProvider;
+  let { litesvm, provider, program } = {} as {
+    litesvm: LiteSVM;
+    provider: LiteSVMProvider;
     program: Program<Dice>;
   };
 
@@ -18,15 +18,10 @@ describe("initialize", () => {
   const initialHouseBal = LAMPORTS_PER_SOL * 10;
 
   beforeEach(async () => {
-    ({ context, provider, program } = await getBankrunSetup([
+    ({ litesvm, provider, program } = await getSetup([
       {
-        address: houseKeypair.publicKey,
-        info: {
-          lamports: initialHouseBal,
-          data: Buffer.alloc(0),
-          owner: SystemProgram.programId,
-          executable: false,
-        },
+        pubkey: houseKeypair.publicKey,
+        account: fundedSystemAccountInfo(initialHouseBal),
       },
     ]));
   });
@@ -42,14 +37,12 @@ describe("initialize", () => {
       .signers([houseKeypair])
       .rpc();
 
-    const [vaultPda] = getVaultPdaAndBump(houseKeypair.publicKey);
-    const vaultBal = await context.banksClient.getBalance(vaultPda);
+    const [vaultPda] = getVaultPda(houseKeypair.publicKey);
+    const vaultBal = litesvm.getBalance(vaultPda);
 
     expect(Number(vaultBal)).toBe(amount.toNumber());
 
-    const postHouseBal = await context.banksClient.getBalance(
-      houseKeypair.publicKey
-    );
+    const postHouseBal = litesvm.getBalance(houseKeypair.publicKey);
 
     expect(Number(postHouseBal)).toBe(initialHouseBal - amount.toNumber());
   });

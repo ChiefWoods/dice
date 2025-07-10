@@ -1,42 +1,37 @@
-import { BankrunProvider } from "anchor-bankrun";
 import { beforeEach, describe, expect, test } from "bun:test";
-import { ProgramTestContext } from "solana-bankrun";
 import { Dice } from "../../target/types/dice";
 import { BN, Program } from "@coral-xyz/anchor";
-import { Keypair, LAMPORTS_PER_SOL, SystemProgram } from "@solana/web3.js";
-import { getBankrunSetup } from "../setup";
+import { Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { randomBytes } from "crypto";
-import { getBetPdaAndBump, getVaultPdaAndBump } from "../pda";
-import { getBetAcc } from "../accounts";
+import { getBetPda, getVaultPda } from "../pda";
+import { fetchBetAcc } from "../accounts";
+import { LiteSVM } from "litesvm";
+import { LiteSVMProvider } from "anchor-litesvm";
+import { fundedSystemAccountInfo, getSetup } from "../setup";
 
 describe("placeBet", () => {
-  let { context, provider, program } = {} as {
-    context: ProgramTestContext;
-    provider: BankrunProvider;
+  let { litesvm, provider, program } = {} as {
+    litesvm: LiteSVM;
+    provider: LiteSVMProvider;
     program: Program<Dice>;
   };
 
   const [houseKeypair, playerKeypair] = Array.from({ length: 2 }, () =>
-    Keypair.generate()
+    Keypair.generate(),
   );
 
-  const [vaultPda] = getVaultPdaAndBump(houseKeypair.publicKey);
+  const [vaultPda] = getVaultPda(houseKeypair.publicKey);
   let initialVaultBal: bigint;
   let initialPlayerBal: bigint;
 
   beforeEach(async () => {
-    ({ context, provider, program } = await getBankrunSetup(
+    ({ litesvm, provider, program } = await getSetup(
       [houseKeypair, playerKeypair].map((kp) => {
         return {
-          address: kp.publicKey,
-          info: {
-            lamports: LAMPORTS_PER_SOL * 10,
-            data: Buffer.alloc(0),
-            owner: SystemProgram.programId,
-            executable: false,
-          },
+          pubkey: kp.publicKey,
+          account: fundedSystemAccountInfo(10 * LAMPORTS_PER_SOL),
         };
-      })
+      }),
     ));
 
     await program.methods
@@ -47,17 +42,15 @@ describe("placeBet", () => {
       .signers([houseKeypair])
       .rpc();
 
-    initialVaultBal = await context.banksClient.getBalance(vaultPda);
-    initialPlayerBal = await context.banksClient.getBalance(
-      playerKeypair.publicKey
-    );
+    initialVaultBal = litesvm.getBalance(vaultPda);
+    initialPlayerBal = litesvm.getBalance(playerKeypair.publicKey);
   });
 
   test("place a bet", async () => {
     const seed = new BN(randomBytes(16));
     const roll = 50;
     const amount = new BN(LAMPORTS_PER_SOL);
-    const slot = (await context.banksClient.getClock()).slot;
+    const slot = litesvm.getClock().slot;
 
     await program.methods
       .placeBet(seed, roll, amount)
@@ -68,9 +61,9 @@ describe("placeBet", () => {
       .signers([playerKeypair])
       .rpc();
 
-    const [vaultPda] = getVaultPdaAndBump(houseKeypair.publicKey);
-    const [betPda, betBump] = getBetPdaAndBump(vaultPda, seed);
-    const betAcc = await getBetAcc(program, betPda);
+    const [vaultPda] = getVaultPda(houseKeypair.publicKey);
+    const [betPda, betBump] = getBetPda(vaultPda, seed);
+    const betAcc = await fetchBetAcc(program, betPda);
 
     expect(betAcc.bump).toEqual(betBump);
     expect(betAcc.roll).toEqual(roll);
@@ -79,19 +72,17 @@ describe("placeBet", () => {
     expect(betAcc.seed).toStrictEqual(seed);
     expect(betAcc.player).toStrictEqual(playerKeypair.publicKey);
 
-    const postVaultBal = await context.banksClient.getBalance(vaultPda);
+    const postVaultBal = litesvm.getBalance(vaultPda);
 
     expect(Number(postVaultBal)).toBe(
-      Number(initialVaultBal) + amount.toNumber()
+      Number(initialVaultBal) + amount.toNumber(),
     );
 
-    const postPlayerBal = await context.banksClient.getBalance(
-      playerKeypair.publicKey
-    );
-    const betAccBal = await context.banksClient.getBalance(betPda);
+    const postPlayerBal = litesvm.getBalance(playerKeypair.publicKey);
+    const betAccBal = litesvm.getBalance(betPda);
 
     expect(Number(postPlayerBal)).toBe(
-      Number(initialPlayerBal) - amount.toNumber() - Number(betAccBal)
+      Number(initialPlayerBal) - amount.toNumber() - Number(betAccBal),
     );
   });
 });

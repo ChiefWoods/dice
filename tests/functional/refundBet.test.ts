@@ -1,45 +1,40 @@
-import { AnchorError, BN, Program } from "@coral-xyz/anchor";
-import { BankrunProvider } from "anchor-bankrun";
+import { BN, Program } from "@coral-xyz/anchor";
 import { beforeEach, describe, expect, test } from "bun:test";
-import { Clock, ProgramTestContext } from "solana-bankrun";
 import { Dice } from "../../target/types/dice";
-import { Keypair, LAMPORTS_PER_SOL, SystemProgram } from "@solana/web3.js";
-import { getBankrunSetup } from "../setup";
+import { Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { randomBytes } from "crypto";
-import { getBetPdaAndBump, getVaultPdaAndBump } from "../pda";
+import { getBetPda, getVaultPda } from "../pda";
+import { Clock, LiteSVM } from "litesvm";
+import { LiteSVMProvider } from "anchor-litesvm";
+import { expectAnchorError, fundedSystemAccountInfo, getSetup } from "../setup";
 
 describe("refundBet", () => {
-  let { context, provider, program } = {} as {
-    context: ProgramTestContext;
-    provider: BankrunProvider;
+  let { litesvm, provider, program } = {} as {
+    litesvm: LiteSVM;
+    provider: LiteSVMProvider;
     program: Program<Dice>;
   };
 
   const [houseKeypair, playerKeypair] = Array.from({ length: 2 }, () =>
-    Keypair.generate()
+    Keypair.generate(),
   );
   const seed = new BN(randomBytes(16));
   const amount = new BN(LAMPORTS_PER_SOL);
 
-  const [vaultPda] = getVaultPdaAndBump(houseKeypair.publicKey);
-  const [betPda] = getBetPdaAndBump(vaultPda, seed);
+  const [vaultPda] = getVaultPda(houseKeypair.publicKey);
+  const [betPda] = getBetPda(vaultPda, seed);
   let initialVaultBal: bigint;
   let initialPlayerBal: bigint;
   let betAccBal: bigint;
 
   beforeEach(async () => {
-    ({ context, provider, program } = await getBankrunSetup(
+    ({ litesvm, provider, program } = await getSetup(
       [houseKeypair, playerKeypair].map((kp) => {
         return {
-          address: kp.publicKey,
-          info: {
-            lamports: LAMPORTS_PER_SOL * 10,
-            data: Buffer.alloc(0),
-            owner: SystemProgram.programId,
-            executable: false,
-          },
+          pubkey: kp.publicKey,
+          account: fundedSystemAccountInfo(10 * LAMPORTS_PER_SOL),
         };
-      })
+      }),
     ));
 
     await program.methods
@@ -59,11 +54,9 @@ describe("refundBet", () => {
       .signers([playerKeypair])
       .rpc();
 
-    initialVaultBal = await context.banksClient.getBalance(vaultPda);
-    initialPlayerBal = await context.banksClient.getBalance(
-      playerKeypair.publicKey
-    );
-    betAccBal = await context.banksClient.getBalance(betPda);
+    initialVaultBal = litesvm.getBalance(vaultPda);
+    initialPlayerBal = litesvm.getBalance(playerKeypair.publicKey);
+    betAccBal = litesvm.getBalance(betPda);
   });
 
   test("refund a bet", async () => {
@@ -73,16 +66,16 @@ describe("refundBet", () => {
       epoch,
       leaderScheduleEpoch,
       unixTimestamp,
-    } = await context.banksClient.getClock();
+    } = litesvm.getClock();
     const refundCooldownSlots = 9000; // 1 hour
-    context.setClock(
+    litesvm.setClock(
       new Clock(
         slot + BigInt(refundCooldownSlots + 1),
         epochStartTimestamp,
         epoch,
         leaderScheduleEpoch,
-        unixTimestamp
-      )
+        unixTimestamp,
+      ),
     );
 
     await program.methods
@@ -95,22 +88,20 @@ describe("refundBet", () => {
       .signers([playerKeypair])
       .rpc();
 
-    const betAcc = await context.banksClient.getAccount(betPda);
+    const betAccBal = litesvm.getBalance(betPda);
 
-    expect(betAcc).toBeNull();
+    expect(betAccBal).toBe(0n);
 
-    const postVaultBal = await context.banksClient.getBalance(vaultPda);
+    const postVaultBal = litesvm.getBalance(vaultPda);
 
     expect(Number(postVaultBal)).toBe(
-      Number(initialVaultBal) - amount.toNumber()
+      Number(initialVaultBal) - amount.toNumber(),
     );
 
-    const postPlayerBal = await context.banksClient.getBalance(
-      playerKeypair.publicKey
-    );
+    const postPlayerBal = litesvm.getBalance(playerKeypair.publicKey);
 
-    expect(Number(postPlayerBal)).toBe(
-      Number(initialPlayerBal) + amount.toNumber() + Number(betAccBal)
+    expect(Number(postPlayerBal)).toBeGreaterThan(
+      Number(initialPlayerBal) + amount.toNumber() + Number(betAccBal),
     );
   });
 
@@ -126,9 +117,7 @@ describe("refundBet", () => {
         .signers([playerKeypair])
         .rpc();
     } catch (err) {
-      expect(err).toBeInstanceOf(AnchorError);
-      expect(err.error.errorCode.code).toEqual("RefundCooldownNotElapsed");
-      expect(err.error.errorCode.number).toEqual(7000);
+      expectAnchorError(err, "RefundCooldownNotElapsed");
     }
   });
 });

@@ -1,47 +1,41 @@
-import { AnchorError, BN, Program } from "@coral-xyz/anchor";
-import { BankrunProvider } from "anchor-bankrun";
+import { BN, Program } from "@coral-xyz/anchor";
 import { beforeEach, describe, expect, test } from "bun:test";
-import { ProgramTestContext } from "solana-bankrun";
 import { Dice } from "../../target/types/dice";
 import {
   Ed25519Program,
   Keypair,
   LAMPORTS_PER_SOL,
-  SystemProgram,
   SYSVAR_INSTRUCTIONS_PUBKEY,
 } from "@solana/web3.js";
-import { getBankrunSetup } from "../setup";
 import { randomBytes } from "crypto";
-import { getBetPdaAndBump, getVaultPdaAndBump } from "../pda";
+import { getBetPda, getVaultPda } from "../pda";
+import { LiteSVM } from "litesvm";
+import { LiteSVMProvider } from "anchor-litesvm";
+import { expectAnchorError, fundedSystemAccountInfo, getSetup } from "../setup";
 
 describe("resolveBet", () => {
-  let { context, provider, program } = {} as {
-    context: ProgramTestContext;
-    provider: BankrunProvider;
+  let { litesvm, provider, program } = {} as {
+    litesvm: LiteSVM;
+    provider: LiteSVMProvider;
     program: Program<Dice>;
   };
 
   const [houseKeypair, playerKeypair] = Array.from({ length: 2 }, () =>
-    Keypair.generate()
+    Keypair.generate(),
   );
   const seed = new BN(randomBytes(16));
   const amount = new BN(LAMPORTS_PER_SOL);
 
-  const [vaultPda] = getVaultPdaAndBump(houseKeypair.publicKey);
+  const [vaultPda] = getVaultPda(houseKeypair.publicKey);
 
   beforeEach(async () => {
-    ({ context, provider, program } = await getBankrunSetup(
+    ({ litesvm, provider, program } = await getSetup(
       [houseKeypair, playerKeypair].map((kp) => {
         return {
-          address: kp.publicKey,
-          info: {
-            lamports: LAMPORTS_PER_SOL * 10,
-            data: Buffer.alloc(0),
-            owner: SystemProgram.programId,
-            executable: false,
-          },
+          pubkey: kp.publicKey,
+          account: fundedSystemAccountInfo(10 * LAMPORTS_PER_SOL),
         };
-      })
+      }),
     ));
 
     await program.methods
@@ -63,13 +57,11 @@ describe("resolveBet", () => {
   });
 
   test("resolve a bet", async () => {
-    const initVaultBal = await context.banksClient.getBalance(vaultPda);
-    const initPlayerBal = await context.banksClient.getBalance(
-      playerKeypair.publicKey
-    );
+    const initVaultBal = litesvm.getBalance(vaultPda);
+    const initPlayerBal = litesvm.getBalance(playerKeypair.publicKey);
 
-    const [betPda] = getBetPdaAndBump(vaultPda, seed);
-    let betAcc = await context.banksClient.getAccount(betPda);
+    const [betPda] = getBetPda(vaultPda, seed);
+    let betAcc = litesvm.getAccount(betPda);
 
     const sigIx = Ed25519Program.createInstructionWithPrivateKey({
       message: betAcc.data.subarray(8), // begin after Anchor account discriminator
@@ -90,18 +82,18 @@ describe("resolveBet", () => {
       .signers([houseKeypair])
       .rpc();
 
-    betAcc = await context.banksClient.getAccount(betPda);
+    const betAccBal = litesvm.getBalance(betPda);
 
-    expect(betAcc).toBeNull();
+    expect(betAccBal).toBe(0n);
 
-    const postVaultBal = await context.banksClient.getBalance(vaultPda);
+    const postVaultBal = litesvm.getBalance(vaultPda);
 
     expect(initVaultBal).toBeGreaterThanOrEqual(postVaultBal);
   });
 
   test("throws if program of first instruction is not Ed25519", async () => {
-    const [betPda] = getBetPdaAndBump(vaultPda, seed);
-    const betAcc = await context.banksClient.getAccount(betPda);
+    const [betPda] = getBetPda(vaultPda, seed);
+    const betAcc = litesvm.getAccount(betPda);
 
     const sigIx = Ed25519Program.createInstructionWithPrivateKey({
       message: betAcc.data.subarray(8),
@@ -123,15 +115,13 @@ describe("resolveBet", () => {
         .signers([houseKeypair])
         .rpc();
     } catch (err) {
-      expect(err).toBeInstanceOf(AnchorError);
-      expect(err.error.errorCode.code).toEqual("InvalidEd25519ProgramID");
-      expect(err.error.errorCode.number).toEqual(6000);
+      expectAnchorError(err, "InvalidEd25519ProgramID");
     }
   });
 
   test("throws if signature pubkey is invalid", async () => {
-    const [betPda] = getBetPdaAndBump(vaultPda, seed);
-    const betAcc = await context.banksClient.getAccount(betPda);
+    const [betPda] = getBetPda(vaultPda, seed);
+    const betAcc = litesvm.getAccount(betPda);
 
     const sigIx = Ed25519Program.createInstructionWithPrivateKey({
       message: betAcc.data.subarray(8),
@@ -153,17 +143,13 @@ describe("resolveBet", () => {
         .signers([houseKeypair])
         .rpc();
     } catch (err) {
-      expect(err).toBeInstanceOf(AnchorError);
-      expect(err.error.errorCode.code).toEqual("InvalidEd25519Pubkey");
-      expect(err.error.errorCode.number).toEqual(6004);
+      expectAnchorError(err, "InvalidEd25519Pubkey");
     }
   });
 
   test("throws if instruction data does not match", async () => {
-    const [betPda] = getBetPdaAndBump(vaultPda, seed);
-    const playerAcc = await context.banksClient.getAccount(
-      playerKeypair.publicKey
-    );
+    const [betPda] = getBetPda(vaultPda, seed);
+    const playerAcc = litesvm.getAccount(playerKeypair.publicKey);
 
     const sigIx = Ed25519Program.createInstructionWithPrivateKey({
       message: playerAcc.data,
@@ -185,9 +171,7 @@ describe("resolveBet", () => {
         .signers([houseKeypair])
         .rpc();
     } catch (err) {
-      expect(err).toBeInstanceOf(AnchorError);
-      expect(err.error.errorCode.code).toEqual("InvalidEd25519Message");
-      expect(err.error.errorCode.number).toEqual(6006);
+      expectAnchorError(err, "InvalidEd25519Message");
     }
   });
 });

@@ -1,6 +1,6 @@
 # Dice
 
-Dice bet game for [Turbin3 Builders Cohort](https://turbin3.com/).
+Dice betting game for [Turbin3 Builders Cohort](https://turbin3.com/).
 
 [Source Repository](https://github.com/ChiefWoods/dice)
 
@@ -14,9 +14,9 @@ Dice bet game for [Turbin3 Builders Cohort](https://turbin3.com/).
 ### Libraries
 
 - [@coral-xyz/anchor](https://www.anchor-lang.com/)
-- [@solana/web3.js](https://solana-labs.github.io/solana-web3.js/)
-- [solana-bankrun](https://kevinheavey.github.io/solana-bankrun/)
-- [anchor-bankrun](https://kevinheavey.github.io/solana-bankrun/)
+- [@solana/web3.js](https://solana-foundation.github.io/solana-web3.js/)
+- [litesvm](https://github.com/LiteSVM/litesvm/tree/master/crates/node-litesvm)
+- [anchor-litesvm](https://github.com/LiteSVM/anchor-litesvm/)
 
 ### Crates
 
